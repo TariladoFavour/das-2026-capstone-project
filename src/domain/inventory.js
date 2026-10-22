@@ -1,6 +1,4 @@
-// Build 1: the domain core, running entirely in memory.
-// No server, no database. Just objects, Maps and rules.
-// Build 4 replaces this file with services + repositories.
+// In-memory domain store and business rules for events, tiers, bookings, and waitlists.
 
 import { newId, referenceCode } from './ids.js';
 import { Queue } from './waitlistQueue.js';
@@ -9,7 +7,7 @@ import { summarizeEvent } from './eventSearch.js';
 
 export const MAX_TICKETS_PER_BOOKING = 10;
 
-// Bookings in these states are holding seats. A cancelled one is not.
+// Bookings in these states hold seats; cancelled bookings do not.
 const HOLDS_SEATS = new Set(['pending', 'paid']);
 
 export function createStore() {
@@ -17,7 +15,7 @@ export function createStore() {
     events: new Map(), // eventId -> event
     tiers: new Map(), // tierId -> tier
     bookings: new Map(), // bookingId -> booking
-    bookingsByReference: new Map(), // reference -> booking  (hash map = O(1) lookup)
+    bookingsByReference: new Map(), // reference -> booking (O(1) hash map lookup)
     waitlists: new Map(), // tierId -> Queue
   };
 }
@@ -36,16 +34,16 @@ function requireWholeNumber(value, field, min) {
   return value;
 }
 
-function getTier(store, tierId) {
-  const tier = store.tiers.get(tierId);
-  if (!tier) throw new DomainError('NOT_FOUND', 'Ticket tier not found');
-  return tier;
-}
-
 function getEvent(store, eventId) {
   const event = store.events.get(eventId);
   if (!event) throw new DomainError('NOT_FOUND', 'Event not found');
   return event;
+}
+
+function getTier(store, tierId) {
+  const tier = store.tiers.get(tierId);
+  if (!tier) throw new DomainError('NOT_FOUND', 'Ticket tier not found');
+  return tier;
 }
 
 export function createEvent(store, { title, city, venue = '', startsAt, organizerId }) {
@@ -53,16 +51,18 @@ export function createEvent(store, { title, city, venue = '', startsAt, organize
   if (Number.isNaN(date.getTime())) {
     throw new DomainError('VALIDATION', 'startsAt must be a valid date');
   }
+
   const event = {
     id: newId(),
     organizerId,
     title: requireText(title, 'Title'),
     city: requireText(city, 'City'),
-    venue: String(venue).trim(),
+    venue: String(venue || '').trim(),
     startsAt: date.toISOString(),
     status: 'draft',
     tierIds: [],
   };
+
   store.events.set(event.id, event);
   return event;
 }
@@ -74,11 +74,12 @@ export function addTier(store, eventId, { name, priceCents, capacity }) {
     id: newId(),
     eventId,
     name: requireText(name, 'Tier name'),
-    // Money is ALWAYS whole cents. 0.1 + 0.2 !== 0.3 in floating point.
+    // Money is stored as whole cents (never decimals).
     priceCents: requireWholeNumber(priceCents, 'priceCents', 0),
     capacity: requireWholeNumber(capacity, 'capacity', 1),
     sold: 0,
   };
+
   store.tiers.set(tier.id, tier);
   store.waitlists.set(tier.id, new Queue());
   event.tierIds.push(tier.id);
@@ -88,13 +89,18 @@ export function addTier(store, eventId, { name, priceCents, capacity }) {
 export function publishEvent(store, eventId) {
   const event = getEvent(store, eventId);
   if (event.tierIds.length === 0) {
-    throw new DomainError('INVALID_STATE', 'Add at least one ticket tier before publishing');
+    throw new DomainError('INVALID_STATE', 'Cannot publish an event with no ticket tiers');
   }
   event.status = 'published';
   return event;
 }
 
-// What the public event list is built from. Drafts are hidden unless asked for.
+export function unpublishEvent(store, eventId) {
+  const event = getEvent(store, eventId);
+  event.status = 'draft';
+  return event;
+}
+
 export function listEventSummaries(store, { publishedOnly = true } = {}) {
   return [...store.events.values()]
     .filter((event) => !publishedOnly || event.status === 'published')
@@ -107,6 +113,7 @@ export function seatsLeft(tier) {
 
 export function bookTickets(store, tierId, userId, quantity) {
   const tier = getTier(store, tierId);
+
   if (!Number.isInteger(quantity) || quantity < 1 || quantity > MAX_TICKETS_PER_BOOKING) {
     throw new DomainError('VALIDATION', `quantity must be between 1 and ${MAX_TICKETS_PER_BOOKING}`);
   }
@@ -134,6 +141,7 @@ export function bookTickets(store, tierId, userId, quantity) {
     status: 'pending',
     createdAt: new Date().toISOString(),
   };
+
   store.bookings.set(booking.id, booking);
   store.bookingsByReference.set(reference, booking);
   return booking;
@@ -167,8 +175,6 @@ export function joinWaitlist(store, tierId, userId, quantity) {
   return { position: queue.size };
 }
 
-// Strict first-in-first-out: only the person at the head of the line is considered.
-// Discussion question for class: what happens if the head wants 4 seats and only 1 is free?
 export function offerNextOnWaitlist(store, tierId) {
   const tier = getTier(store, tierId);
   const queue = store.waitlists.get(tierId);

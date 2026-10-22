@@ -14,9 +14,9 @@ Every time you give an AI tool a significant prompt, add an entry. Three lines e
 ## Build 2
 
 ### Prompt 1: Build 2 prompt (docs/build-2.md)
-- **What I asked:**
-- **What came back:**
-- **What was wrong (or "nothing"):**
+- **What I asked:** Replace existing sorting.js, eventSearch.js, inventory.js additions (publishEvent, listEventSummaries), and test suite with fresh implementations covering acceptance criteria for S02, S03, S04, S05, S06, and S16.
+- **What came back:** Custom stable mergeSort, pure eventSearch functions with tie-breaking, publishEvent/unpublishEvent, and 48 passing tests across 4 test suites.
+- **What was wrong (or "nothing"):** The AI initially added unpublishEvent which wasn't strictly in the prompt's numbered list (though S04's title mentioned unpublishing). I verified that date-only "to" filters correctly span until the end of the day, that events with no tiers are excluded when filtering by maxPriceCents, and that mergeSort is genuinely stable without calling Array.prototype.sort. All 48 tests passed.
 
 ### Prompt 2:
 - **What I asked:**
