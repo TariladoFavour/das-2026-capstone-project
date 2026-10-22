@@ -2,35 +2,58 @@ import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { Queue } from '../src/domain/waitlistQueue.js';
 
-describe('Queue', () => {
-  it('returns items first in, first out', () => {
+describe('Waitlist Queue Linked List', () => {
+  it('operates in strict first-in, first-out (FIFO) order', () => {
     const queue = new Queue();
-    queue.enqueue('a');
-    queue.enqueue('b');
-    queue.enqueue('c');
-    assert.equal(queue.dequeue(), 'a');
-    assert.equal(queue.dequeue(), 'b');
-    assert.equal(queue.dequeue(), 'c');
+    queue.enqueue({ name: 'First' });
+    queue.enqueue({ name: 'Second' });
+    queue.enqueue({ name: 'Third' });
+
+    assert.deepEqual(queue.dequeue(), { name: 'First' });
+    assert.deepEqual(queue.dequeue(), { name: 'Second' });
+    assert.deepEqual(queue.dequeue(), { name: 'Third' });
   });
 
-  it('tracks size and peeks without removing', () => {
+  it('tracks size dynamically in O(1)', () => {
     const queue = new Queue();
     assert.equal(queue.size, 0);
-    assert.equal(queue.peek(), undefined);
-    queue.enqueue(1);
-    queue.enqueue(2);
+
+    queue.enqueue(10);
+    assert.equal(queue.size, 1);
+
+    queue.enqueue(20);
     assert.equal(queue.size, 2);
-    assert.equal(queue.peek(), 1);
+
+    queue.dequeue();
+    assert.equal(queue.size, 1);
+
+    queue.dequeue();
+    assert.equal(queue.size, 0);
+  });
+
+  it('peeks at the head element without removing it', () => {
+    const queue = new Queue();
+    assert.equal(queue.peek(), undefined);
+
+    queue.enqueue('alpha');
+    queue.enqueue('beta');
+
+    assert.equal(queue.peek(), 'alpha');
     assert.equal(queue.size, 2);
   });
 
-  it('returns undefined when empty and works again after emptying', () => {
+  it('safely handles empty state and re-enqueueing after exhaustion', () => {
     const queue = new Queue();
     assert.equal(queue.dequeue(), undefined);
-    queue.enqueue('x');
-    queue.dequeue();
+
+    queue.enqueue('item-1');
+    assert.equal(queue.dequeue(), 'item-1');
     assert.equal(queue.dequeue(), undefined);
-    queue.enqueue('y');
-    assert.deepEqual(queue.toArray(), ['y']);
+
+    // Can enqueue again cleanly
+    queue.enqueue('item-2');
+    assert.equal(queue.size, 1);
+    assert.equal(queue.peek(), 'item-2');
+    assert.deepEqual(queue.toArray(), ['item-2']);
   });
 });

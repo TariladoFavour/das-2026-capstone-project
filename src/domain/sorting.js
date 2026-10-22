@@ -1,36 +1,63 @@
-// Merge sort: O(n log n) in every case, and STABLE.
-// Stable means items that compare equal keep their original order. That matters
-// when you sort by date and want events on the same day to stay in title order.
+// Merge sort: O(n log n) in all cases, and STABLE.
+// Stable means equal elements retain their original relative order.
+// This is essential when sorting events with identical dates or prices.
 
-const defaultCompare = (a, b) => (a < b ? -1 : a > b ? 1 : 0);
+const defaultCompare = (a, b) => {
+  if (a < b) return -1;
+  if (a > b) return 1;
+  return 0;
+};
 
-// Returns a new array. The input is never modified.
+/**
+ * Pure, stable merge sort implementation.
+ * Never modifies the input array; always returns a new sorted array.
+ *
+ * @template T
+ * @param {T[]} items
+ * @param {(a: T, b: T) => number} [compare]
+ * @returns {T[]}
+ */
 export function mergeSort(items, compare = defaultCompare) {
-  if (items.length <= 1) return [...items];
+  if (!Array.isArray(items)) {
+    throw new TypeError('mergeSort expects an array');
+  }
 
-  const middle = Math.floor(items.length / 2);
-  const left = mergeSort(items.slice(0, middle), compare);
-  const right = mergeSort(items.slice(middle), compare);
-  return merge(left, right, compare);
+  // Base case: empty or single element is already sorted.
+  if (items.length <= 1) {
+    return [...items];
+  }
+
+  const mid = Math.floor(items.length / 2);
+  const leftHalf = mergeSort(items.slice(0, mid), compare);
+  const rightHalf = mergeSort(items.slice(mid), compare);
+
+  return merge(leftHalf, rightHalf, compare);
 }
 
+/**
+ * Merges two sorted arrays stably.
+ * Taking from the left partition on equality (compare <= 0) ensures stability.
+ */
 function merge(left, right, compare) {
-  const merged = [];
+  const result = new Array(left.length + right.length);
   let l = 0;
   let r = 0;
+  let i = 0;
 
   while (l < left.length && r < right.length) {
-    // `<= 0` (take from the LEFT on ties) is what makes the sort stable.
     if (compare(left[l], right[r]) <= 0) {
-      merged.push(left[l]);
-      l += 1;
+      result[i++] = left[l++];
     } else {
-      merged.push(right[r]);
-      r += 1;
+      result[i++] = right[r++];
     }
   }
 
-  while (l < left.length) merged.push(left[l++]);
-  while (r < right.length) merged.push(right[r++]);
-  return merged;
+  while (l < left.length) {
+    result[i++] = left[l++];
+  }
+  while (r < right.length) {
+    result[i++] = right[r++];
+  }
+
+  return result;
 }
