@@ -1,63 +1,96 @@
-import { after, before, describe, it } from 'node:test';
+import { describe, it, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { createAppServer } from '../src/http/app.js';
 
-describe('HTTP app', () => {
-  const server = createAppServer();
+describe('HTTP Application Server', () => {
+  const app = createAppServer();
   let baseUrl;
 
   before(async () => {
     await new Promise((resolve, reject) => {
-      server.once('error', reject);
-      server.listen(0, '127.0.0.1', resolve);
+      app.once('error', reject);
+      app.listen(0, '127.0.0.1', resolve);
     });
-    baseUrl = `http://127.0.0.1:${server.address().port}`;
+    const { port } = app.address();
+    baseUrl = `http://127.0.0.1:${port}`;
   });
 
   after(async () => {
-    await new Promise((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
-  });
-
-  it('answers a real GET /health request with JSON', async () => {
-    const response = await fetch(`${baseUrl}/health`);
-    assert.equal(response.status, 200);
-    assert.deepEqual(await response.json(), { status: 'ok' });
-  });
-
-  it('uses the shared JSON error shape for an unknown API route', async () => {
-    const response = await fetch(`${baseUrl}/api/missing`);
-    assert.equal(response.status, 404);
-    assert.deepEqual(await response.json(), {
-      error: { code: 'NOT_FOUND', message: 'API route not found' },
+    await new Promise((resolve, reject) => {
+      app.close((err) => (err ? reject(err) : resolve()));
     });
   });
 
-  it('rejects malformed JSON without exposing a stack trace', async () => {
-    const response = await fetch(`${baseUrl}/health`, {
+  it('answers a real HTTP request to GET /health with {"status":"ok"}', async () => {
+    const res = await fetch(`${baseUrl}/health`);
+    assert.equal(res.status, 200);
+    assert.equal(res.headers.get('content-type'), 'application/json; charset=utf-8');
+
+    const body = await res.json();
+    assert.deepEqual(body, { status: 'ok' });
+  });
+
+  it('returns uniform JSON error format for unknown /api routes with 404', async () => {
+    const res = await fetch(`${baseUrl}/api/unknown/endpoint`);
+    assert.equal(res.status, 404);
+
+    const body = await res.json();
+    assert.deepEqual(body, {
+      error: {
+        code: 'NOT_FOUND',
+        message: 'API route not found',
+      },
+    });
+    assert.equal('stack' in body, false, 'Stack trace must not reach client');
+  });
+
+  it('rejects malformed JSON body with JSON 400 and uniform error format', async () => {
+    const res = await fetch(`${baseUrl}/health`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: '{',
+      body: '{"invalid": json syntax here',
     });
-    const payload = await response.json();
-    assert.equal(response.status, 400);
-    assert.deepEqual(Object.keys(payload), ['error']);
-    assert.deepEqual(Object.keys(payload.error), ['code', 'message']);
-    assert.equal(payload.error.code, 'INVALID_JSON');
-    assert.equal('stack' in payload, false);
+    assert.equal(res.status, 400);
+
+    const body = await res.json();
+    assert.deepEqual(body, {
+      error: {
+        code: 'INVALID_JSON',
+        message: 'Request body must contain valid JSON',
+      },
+    });
+    assert.equal('stack' in body, false, 'Stack trace must not reach client');
   });
 
-  it('serves the public index', async () => {
-    const response = await fetch(`${baseUrl}/`);
-    assert.equal(response.status, 200);
-    assert.match(response.headers.get('content-type'), /^text\/html/);
-    assert.match(await response.text(), /Event Ticketing/);
+  it('serves static files from public/ including index.html', async () => {
+    const res = await fetch(`${baseUrl}/`);
+    assert.equal(res.status, 200);
+    assert.match(res.headers.get('content-type'), /^text\/html/);
+
+    const html = await res.text();
+    assert.match(html, /Event Ticketing Platform/);
   });
 
-  it('does not serve files outside public', async () => {
-    const response = await fetch(`${baseUrl}/%2e%2e%2fREADME.md`);
-    assert.equal(response.status, 404);
-    assert.deepEqual(await response.json(), {
-      error: { code: 'NOT_FOUND', message: 'File not found' },
-    });
+  it('prevents path traversal outside of the public directory', async () => {
+    // Attempting traversal to read package.json or README.md
+    const attempts = [
+      '/%2e%2e/README.md',
+      '/..%2fREADME.md',
+      '/%2e%2e%2fpackage.json',
+      '/../../README.md',
+    ];
+
+    for (const path of attempts) {
+      const res = await fetch(`${baseUrl}${path}`);
+      assert.equal(res.status, 404);
+
+      const body = await res.json();
+      assert.deepEqual(body, {
+        error: {
+          code: 'NOT_FOUND',
+          message: 'File not found',
+        },
+      });
+    }
   });
 });

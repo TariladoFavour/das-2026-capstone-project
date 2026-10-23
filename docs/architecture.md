@@ -1,22 +1,30 @@
-# Build 3 architecture
+# System Architecture: Event Ticketing Platform
 
-## Layers
+## 1. Architectural Layers
+
+The system follows a strict layered architecture where dependencies point only downwards. Nothing may call upwards.
 
 ```mermaid
 flowchart TB
-  routes[HTTP routes] --> services[Services]
-  services --> rules[Domain rules]
-  services --> repositories[Repositories]
-  repositories --> data[(Data store)]
+  routes["HTTP Routes"] --> services["Services"]
+  services --> rules["Domain Rules"]
+  services --> repositories["Repositories"]
+  repositories --> data[("Data Store")]
 ```
 
-- **Routes** may translate HTTP requests and responses; they may not contain business rules or access data directly.
-- **Services** may coordinate domain rules and repositories; they may not depend on HTTP details or call routes.
-- **Domain rules** may validate and apply business rules; they may not perform I/O or depend on services, repositories, or routes.
-- **Repositories** may read and write data; they may not make business decisions or call services, rules, or routes.
-- **Data store** holds persisted data; it may not call application layers.
+### Layer Responsibilities and Constraints
 
-## Data model
+- **HTTP Routes**: May parse incoming HTTP requests, decode parameters, and serialize JSON or HTML responses; may not execute business rules or interact directly with the database.
+- **Services**: May orchestrate multi-step business workflows, coordinate domain rules, and call repositories; may not depend on HTTP request/response primitives or call back to routes.
+- **Domain Rules**: May validate entity state transitions, enforce core ticketing rules, and operate as pure logic in memory; may not execute network/disk I/O or depend on repositories or services.
+- **Repositories**: May perform CRUD queries and atomic transactions against SQLite/memory; may not make domain business decisions or call services or routes.
+- **Data Store**: May persist structured records and enforce schema constraints; may not initiate calls to application layers.
+
+---
+
+## 2. Data Model
+
+The domain consists of four primary entities: `USERS`, `EVENTS`, `TICKET_TIERS`, and `BOOKINGS`.
 
 ```mermaid
 erDiagram
@@ -60,16 +68,20 @@ erDiagram
   }
 ```
 
-## Booking life cycle
+---
+
+## 3. Booking Life Cycle
+
+The booking status progresses through an explicit finite state machine. `cancelled`, `refunded`, and `checked_in` are terminal states.
 
 ```mermaid
 stateDiagram-v2
   [*] --> pending
-  pending --> paid
-  pending --> cancelled
-  paid --> checked_in
-  paid --> refunded
-  paid --> cancelled
+  pending --> paid : payment completed
+  pending --> cancelled : expired or user cancelled
+  paid --> checked_in : ticket scanned at door
+  paid --> refunded : refund processed
+  paid --> cancelled : booking cancelled
   cancelled --> [*]
   refunded --> [*]
   checked_in --> [*]

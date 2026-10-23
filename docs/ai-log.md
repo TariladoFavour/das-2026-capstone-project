@@ -26,6 +26,7 @@ Every time you give an AI tool a significant prompt, add an entry. Three lines e
 ## Build 3
 
 ### Prompt 1: Build 3 prompt (docs/build-3.md)
-- **What I asked:** Add the architecture diagrams, booking state machine, Node HTTP router/server, configuration, startup script, and tests.
-- **What came back:** A layered architecture document, explicit booking transitions, static-file HTTP server, `/health` route, startup configuration, and `node:test` coverage.
-- **What was wrong (or "nothing"):** The first server draft relied on an implicit response/request property for HEAD handling and had redundant error-status logic; both were simplified. Added a regression test proving static requests cannot escape `public/`.
+
+- **What I asked:** Gave the Build 3 prompt: architecture document, booking state machine, Node HTTP server with a /health route, startup configuration and tests.
+- **What came back:** The AI changed 10 files (+503, -248). It kept error responses free of stack traces, added path traversal protection for the public/ folder, and kept route handlers thin by using assertTransition. 61 tests pass, 0 fail.
+- **What was wrong (or "nothing"):** Many of these files already existed from my instructor's update, and the AI replaced them with its own versions. It rewrote a lot of code (248 lines removed), more than I read line by line, so I cannot say every change was needed. I ran npm test and the tests passed.
